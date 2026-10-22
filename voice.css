@@ -1,0 +1,26 @@
+.reading-mode-block { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+.setting-copy strong, .setting-copy span { display: block; }
+.setting-copy strong { font-size: 13px; }
+.setting-copy span { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.mode-button { min-height: 42px; border: 1px solid var(--border); border-radius: 13px; background: var(--surface); color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 11px; font-weight: 800; }
+.mode-button.is-active { border-color: var(--secondary); background: var(--accent-soft); color: var(--tertiary); }
+.mode-button svg { width: 16px; height: 16px; }
+.voice-settings { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+.voice-field { display: grid; gap: 10px; }
+.voice-field > span strong, .voice-field > span small { display: block; }
+.voice-field > span strong { font-size: 13px; }
+.voice-field > span small { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.voice-field select { width: 100%; min-height: 42px; border: 1px solid var(--border); border-radius: 12px; padding: 0 12px; background: var(--surface); color: var(--tertiary); font: inherit; font-size: 11px; }
+.voice-rate-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; }
+.voice-rate-row > div strong, .voice-rate-row > div span { display: block; }
+.voice-rate-row > div strong { font-size: 13px; }
+.voice-rate-row > div span { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.voice-rate-row > strong { font-size: 18px; }
+#voiceRate { width: 100%; margin-top: 14px; accent-color: var(--primary); }
+.voice-note { margin: 12px 0 0; display: flex; align-items: flex-start; gap: 7px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.voice-note svg { width: 14px; height: 14px; flex: 0 0 auto; margin-top: 1px; }
+.reader.is-voice .reader-speed { display: flex; align-items: baseline; gap: 4px; }
+@media (max-width: 600px) {
+  .mode-switch { grid-template-columns: 1fr; }
+}
