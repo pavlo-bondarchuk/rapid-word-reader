@@ -9,8 +9,9 @@ const i18n = {
     setupHint: 'Файл обробляється лише у вашому браузері',
     uploadTitle: 'Завантажте файл',
     uploadHint: 'TXT, MD, PDF або DOCX · можна перетягнути сюди',
-    orPaste: 'або вставте текст',
-    pastePlaceholder: 'Вставте текст сюди...',
+    previewTitle: 'Попередній перегляд',
+    removeFile: 'Видалити файл',
+    encodingWarning: 'Файл має кодування Windows-1251. Текст автоматично перекодовано — перевірте прев’ю перед читанням.',
     speedLabel: 'Швидкість',
     speedHint: 'Слів за хвилину',
     wpm: 'слів/хв',
@@ -36,8 +37,9 @@ const i18n = {
     setupHint: 'The file is processed only in your browser',
     uploadTitle: 'Upload a file',
     uploadHint: 'TXT, MD, PDF or DOCX · or drag it here',
-    orPaste: 'or paste text',
-    pastePlaceholder: 'Paste your text here...',
+    previewTitle: 'Text preview',
+    removeFile: 'Remove file',
+    encodingWarning: 'This file uses Windows-1251 encoding. It was converted automatically — check the preview before reading.',
     speedLabel: 'Speed',
     speedHint: 'Words per minute',
     wpm: 'wpm',
@@ -60,6 +62,9 @@ const state = {
   theme: 'light',
   text: '',
   fileName: '',
+  fileSize: 0,
+  encoding: '',
+  legacyEncoding: false,
   words: [],
   index: 0,
   wpm: 500,
@@ -77,7 +82,11 @@ const els = {
   fileName: document.getElementById('fileName'),
   fileMeta: document.getElementById('fileMeta'),
   removeFile: document.getElementById('removeFile'),
-  textInput: document.getElementById('textInput'),
+  textPreview: document.getElementById('textPreview'),
+  previewCopy: document.getElementById('previewCopy'),
+  encodingBadge: document.getElementById('encodingBadge'),
+  encodingWarning: document.getElementById('encodingWarning'),
+  encodingWarningText: document.getElementById('encodingWarningText'),
   speedRange: document.getElementById('speedRange'),
   speedNumber: document.getElementById('speedNumber'),
   startButton: document.getElementById('startButton'),
@@ -122,13 +131,7 @@ function bindEvents() {
   els.themeToggle.addEventListener('click', toggleTheme);
   els.dropZone.addEventListener('click', () => els.fileInput.click());
   els.fileInput.addEventListener('change', event => handleFiles(event.target.files));
-  els.removeFile.addEventListener('click', clearFile);
-  els.textInput.addEventListener('input', () => {
-    if (els.textInput.value.trim()) clearFile(false);
-    state.text = els.textInput.value.trim();
-    state.fileName = '';
-    updateStartState();
-  });
+  els.removeFile.addEventListener('click', () => clearFile());
 
   ['dragenter', 'dragover'].forEach(type => {
     els.dropZone.addEventListener(type, event => {
@@ -190,12 +193,17 @@ function applyLanguage() {
     const key = node.dataset.i18nHtml;
     if (i18n[state.lang][key] != null) node.innerHTML = i18n[state.lang][key];
   });
-  document.querySelectorAll('[data-i18n-placeholder]').forEach(node => {
-    const key = node.dataset.i18nPlaceholder;
-    if (i18n[state.lang][key] != null) node.placeholder = i18n[state.lang][key];
+  document.querySelectorAll('[data-i18n-aria]').forEach(node => {
+    const key = node.dataset.i18nAria;
+    if (i18n[state.lang][key] != null) node.setAttribute('aria-label', i18n[state.lang][key]);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(node => {
+    const key = node.dataset.i18nTitle;
+    if (i18n[state.lang][key] != null) node.setAttribute('title', i18n[state.lang][key]);
   });
   document.title = state.lang === 'uk' ? 'Rapid Word Reader — швидке читання' : 'Rapid Word Reader — speed reading';
   renderFileMeta();
+  renderPreview();
   renderReaderMeta();
 }
 
@@ -229,22 +237,27 @@ async function handleFiles(fileList) {
 
   showToast(i18n[state.lang].loading, 0);
   try {
-    const text = await extractText(file);
-    const cleaned = normalizeText(text);
+    const result = await extractText(file);
+    const cleaned = normalizeText(result.text);
     if (!cleaned) throw new Error('empty');
+
     state.text = cleaned;
     state.fileName = file.name;
-    els.textInput.value = '';
+    state.fileSize = file.size;
+    state.encoding = result.encoding;
+    state.legacyEncoding = Boolean(result.legacyEncoding);
+    state.words = [];
+    state.index = 0;
+
     els.fileName.textContent = file.name;
     els.fileCard.hidden = false;
-    renderFileMeta(file.size);
+    els.textPreview.hidden = false;
+    renderFileMeta();
+    renderPreview();
     updateStartState();
     hideToast();
   } catch (error) {
-    state.text = '';
-    state.fileName = '';
-    els.fileInput.value = '';
-    updateStartState();
+    clearFile();
     const message = error.message === 'unsupported' ? i18n[state.lang].unsupported : error.message === 'empty' ? i18n[state.lang].emptyFile : i18n[state.lang].parseError;
     showToast(message);
   }
@@ -252,10 +265,21 @@ async function handleFiles(fileList) {
 
 async function extractText(file) {
   const name = file.name.toLowerCase();
-  if (name.endsWith('.txt') || name.endsWith('.md') || name.endsWith('.markdown')) return file.text();
-  if (name.endsWith('.pdf')) return extractPdf(file);
-  if (name.endsWith('.docx')) return extractDocx(file);
+  if (name.endsWith('.txt') || name.endsWith('.md') || name.endsWith('.markdown')) return decodePlainText(file);
+  if (name.endsWith('.pdf')) return { text: await extractPdf(file), encoding: 'PDF', legacyEncoding: false };
+  if (name.endsWith('.docx')) return { text: await extractDocx(file), encoding: 'DOCX', legacyEncoding: false };
   throw new Error('unsupported');
+}
+
+async function decodePlainText(file) {
+  const buffer = await file.arrayBuffer();
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+    return { text, encoding: 'UTF-8', legacyEncoding: false };
+  } catch (error) {
+    const text = new TextDecoder('windows-1251').decode(buffer);
+    return { text, encoding: 'Windows-1251', legacyEncoding: true };
+  }
 }
 
 async function extractPdf(file) {
@@ -299,6 +323,7 @@ function loadScript(src, globalName) {
 
 function normalizeText(text) {
   return String(text || '')
+    .replace(/\uFEFF/g, '')
     .replace(/\u00ad/g, '')
     .replace(/[\u00a0\t]+/g, ' ')
     .replace(/\r\n?/g, '\n')
@@ -306,21 +331,45 @@ function normalizeText(text) {
     .trim();
 }
 
-function clearFile(clearText = true) {
+function clearFile() {
+  stopTimer();
+  state.text = '';
   state.fileName = '';
+  state.fileSize = 0;
+  state.encoding = '';
+  state.legacyEncoding = false;
+  state.words = [];
+  state.index = 0;
+  state.playing = false;
   els.fileInput.value = '';
+  els.fileName.textContent = '';
+  els.fileMeta.textContent = '';
+  els.previewCopy.textContent = '';
+  els.encodingBadge.textContent = '';
+  els.encodingWarningText.textContent = '';
   els.fileCard.hidden = true;
-  if (clearText) {
-    state.text = els.textInput.value.trim();
-  }
+  els.textPreview.hidden = true;
+  els.encodingWarning.hidden = true;
   updateStartState();
 }
 
-function renderFileMeta(size) {
+function renderFileMeta() {
   if (!state.fileName) return;
   const wordCount = tokenize(state.text).length;
-  const sizeText = size ? ` · ${formatBytes(size)}` : '';
+  const sizeText = state.fileSize ? ` · ${formatBytes(state.fileSize)}` : '';
   els.fileMeta.textContent = `${wordCount.toLocaleString(state.lang === 'uk' ? 'uk-UA' : 'en-US')} ${i18n[state.lang].words}${sizeText}`;
+}
+
+function renderPreview() {
+  if (!state.fileName || !state.text) return;
+  const preview = state.text.length > 760 ? `${state.text.slice(0, 760).trimEnd()}…` : state.text;
+  els.previewCopy.textContent = preview;
+  els.encodingBadge.textContent = state.encoding;
+  els.encodingBadge.classList.toggle('is-warning', state.legacyEncoding);
+  els.encodingWarning.hidden = !state.legacyEncoding;
+  els.encodingWarningText.textContent = state.legacyEncoding ? i18n[state.lang].encodingWarning : '';
+  els.textPreview.hidden = false;
+  renderIcons();
 }
 
 function formatBytes(bytes) {
@@ -330,13 +379,12 @@ function formatBytes(bytes) {
 }
 
 function updateStartState() {
-  const source = state.fileName ? state.text : els.textInput.value.trim();
-  if (!state.fileName) state.text = source;
-  els.startButton.disabled = tokenize(source).length === 0;
+  els.startButton.disabled = tokenize(state.text).length === 0;
 }
 
 function tokenize(text) {
-  return normalizeText(text).split(/\s+/u).filter(Boolean);
+  const normalized = normalizeText(text);
+  return normalized ? normalized.split(/\s+/u).filter(Boolean) : [];
 }
 
 function openReader() {
@@ -417,9 +465,10 @@ function seek(amount) {
 function renderWord() {
   const word = state.words[state.index] || '';
   const pivot = getOrpIndex(word);
-  els.wordBefore.textContent = word.slice(0, pivot);
-  els.wordFocus.textContent = word[pivot] || '•';
-  els.wordAfter.textContent = word.slice(pivot + 1);
+  const glyphs = Array.from(word);
+  els.wordBefore.textContent = glyphs.slice(0, pivot).join('');
+  els.wordFocus.textContent = glyphs[pivot] || '•';
+  els.wordAfter.textContent = glyphs.slice(pivot + 1).join('');
 
   const current = Math.min(state.words.length, state.index + 1);
   const progress = state.words.length ? (current / state.words.length) * 100 : 0;
