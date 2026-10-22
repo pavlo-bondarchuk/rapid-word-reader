@@ -64,11 +64,20 @@
             <strong id="fileName"></strong>
             <span id="fileMeta"></span>
           </div>
-          <button class="file-remove" id="removeFile" type="button" aria-label="Remove file"><i data-lucide="x" aria-hidden="true"></i></button>
+          <button class="file-remove" id="removeFile" type="button" data-i18n-aria="removeFile" aria-label="Видалити файл" data-i18n-title="removeFile" title="Видалити файл"><i data-lucide="x" aria-hidden="true"></i></button>
         </div>
 
-        <div class="divider"><span data-i18n="orPaste">або вставте текст</span></div>
-        <textarea id="textInput" data-i18n-placeholder="pastePlaceholder" placeholder="Вставте текст сюди..."></textarea>
+        <section class="text-preview" id="textPreview" hidden aria-live="polite">
+          <div class="preview-heading">
+            <span data-i18n="previewTitle">Попередній перегляд</span>
+            <span class="encoding-badge" id="encodingBadge"></span>
+          </div>
+          <p class="encoding-warning" id="encodingWarning" hidden>
+            <i data-lucide="triangle-alert" aria-hidden="true"></i>
+            <span id="encodingWarningText"></span>
+          </p>
+          <div class="preview-copy" id="previewCopy"></div>
+        </section>
 
         <div class="speed-block">
           <div class="setting-row">
